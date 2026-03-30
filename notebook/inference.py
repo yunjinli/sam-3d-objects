@@ -2,7 +2,9 @@
 import os
 
 # not ideal to put that here
-os.environ["CUDA_HOME"] = os.environ["CONDA_PREFIX"]
+import sys
+# Uses Pixi's prefix, falls back to Conda's, or defaults to the general Python environment prefix
+os.environ["CUDA_HOME"] = os.environ.get("PIXI_ENVIRONMENT_PREFIX", os.environ.get("CONDA_PREFIX", sys.prefix))
 os.environ["LIDRA_SKIP_INIT"] = "true"
 
 import sys
@@ -110,7 +112,7 @@ class Inference:
             image,
             None,
             seed,
-            stage1_only=False,
+            stage1_only=True,
             with_mesh_postprocess=False,
             with_texture_baking=False,
             with_layout_postprocess=False,
