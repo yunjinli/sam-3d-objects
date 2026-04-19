@@ -1,4 +1,6 @@
 __pycache__
 *.egg-info
 pixi.lock
-.vscode
+.vscode# pixi environments
+.pixi/*
+!.pixi/config.toml

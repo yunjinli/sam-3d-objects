@@ -2,5 +2,10 @@
 import os
 
 # Allow skipping initialization for lightweight tools
-if not os.environ.get('LIDRA_SKIP_INIT'):
-    import sam3d_objects.init
+# if not os.environ.get('LIDRA_SKIP_INIT'):
+#     import sam3d_objects.init
+
+from sam3d_objects.sam3d_config import SAM3DConfig
+from sam3d_objects.predictor import Predictor
+
+__all__ = ["SAM3DConfig", "Predictor"]
