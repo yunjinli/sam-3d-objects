@@ -1,5 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 import os
+
+import matplotlib
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -437,6 +439,12 @@ def run_render_compare(mesh, center, renderer, mask, device):
             optimizer.zero_grad()
             transformed = apply_transform(mesh, center, quat, translation, scale)
             rendered = renderer(transformed)
+            ## Quick vis
+            # import matplotlib
+            # matplotlib.use('Agg')
+            # import matplotlib.pyplot as plt
+            # plt.imshow(rendered[..., 3][0].detach().cpu().numpy())
+            # plt.savefig(f"/tmp/rendered_{stage}_{i}.png")
             loss = compute_loss(rendered, mask, loss_weights, quat, translation, scale)
             loss.backward()
             optimizer.step()
@@ -1068,6 +1076,15 @@ def run_gs_render_compare_rgb_mask(gaussian, center, renderer, intrinsics, mask,
                 extrinsics,
                 intrinsics,
             )
+            
+            ## Quiick vis
+            # import matplotlib
+            # matplotlib.use('Agg')
+            # import matplotlib.pyplot as plt
+            # pred_rgb_channels = extract_rgb_from_gs_rendering(rendered)
+            # plt.imshow(pred_rgb_channels.permute(1, 2, 0).detach().cpu().numpy())
+            # plt.savefig(f"/tmp/gs_rendered_{stage}_{i}.png")
+            # plt.close()
 
             loss, loss_details = compute_gs_loss_rgb_mask(
                 rendered, mask, rgb_image, loss_weights, quat, translation_xyz, scale

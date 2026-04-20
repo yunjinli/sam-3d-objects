@@ -96,6 +96,7 @@ class InferencePipelinePointMap(InferencePipeline):
         self.depth_model = depth_model
         self.layout_post_optimization_method = layout_post_optimization_method
         self.layout_post_optimization_method_GS = layout_post_optimization_method_GS
+        # self.layout_post_optimization_method_GS = None
         self.clip_pointmap_beyond_scale = clip_pointmap_beyond_scale
         super().__init__(*args, **kwargs)
 
@@ -259,7 +260,7 @@ class InferencePipelinePointMap(InferencePipeline):
 
         return revised_scale
 
-    def compute_pointmap(self, image, pointmap=None):
+    def compute_pointmap(self, image, pointmap=None, intrinsics=None):
         loaded_image = self.image_to_float(image)
         loaded_image = torch.from_numpy(loaded_image)
         loaded_mask = loaded_image[..., -1]
@@ -276,43 +277,45 @@ class InferencePipelinePointMap(InferencePipeline):
                 .to(self.device)
             )
             points_tensor = camera_convention_transform.transform_points(pointmaps)
-            intrinsics = output.get("intrinsics", None)
+            inferred_intrinsics = output.get("intrinsics", None)
         else:
-            output = {}
+            ## Apply changes to get known intrinsics
+            logger.info("Using provided pointmap and intrinsics.")
             points_tensor = pointmap.to(self.device)
-            if loaded_image.shape != points_tensor.shape:
-                # Interpolate points_tensor to match loaded_image size
-                # loaded_image has shape [3, H, W], we need H and W
+            if (loaded_image.shape[1] != points_tensor.shape[0]) or (loaded_image.shape[2] != points_tensor.shape[1]):
                 points_tensor = torch.nn.functional.interpolate(
                     points_tensor.permute(2, 0, 1).unsqueeze(0),
                     size=(loaded_image.shape[1], loaded_image.shape[2]),
                     mode="nearest",
                 ).squeeze(0).permute(1, 2, 0)
-            intrinsics = None
-        
-        # Prepare the point map tensor
-        point_map_tensor = {
-            "pts_color": loaded_image,
-        }
-
-        # If depth model doesn't provide intrinsics, infer them
-        if intrinsics is None:
+                
+            # 2. Apply the missing PyTorch3D transform to your custom points!
             camera_convention_transform = (
                 Transform3d()
                 .rotate(camera_to_pytorch3d_camera(device=self.device).rotation)
                 .to(self.device)
             )
-            points_tensor_moge = camera_convention_transform.inverse().transform_points(points_tensor)
+            points_tensor = camera_convention_transform.transform_points(points_tensor)
+            
+            # Use provided intrinsics, otherwise None
+            inferred_intrinsics = intrinsics
+
+        points_tensor = points_tensor.permute(2, 0, 1)
+        points_tensor = self._clip_pointmap(points_tensor, loaded_mask) 
+        
+        # Prepare the point map tensor
+        point_map_tensor = {
+            "pointmap": points_tensor,
+            "pts_color": loaded_image,
+        }
+
+        if inferred_intrinsics is None:
             intrinsics_result = infer_intrinsics_from_pointmap(
-                points_tensor_moge, device=self.device
+                points_tensor.permute(1, 2, 0), device=self.device
             )
             point_map_tensor["intrinsics"] = intrinsics_result["intrinsics"]
         else:
-            point_map_tensor["intrinsics"] = intrinsics
-
-        points_tensor = points_tensor.permute(2, 0, 1)
-        points_tensor = self._clip_pointmap(points_tensor, loaded_mask)
-        point_map_tensor["pointmap"] = points_tensor
+            point_map_tensor["intrinsics"] = inferred_intrinsics
 
         return point_map_tensor
 
@@ -399,10 +402,12 @@ class InferencePipelinePointMap(InferencePipeline):
         pointmap=None,
         decode_formats=None,
         estimate_plane=False,
+        intrinsics=None,
+        gs_backend="gsplat",
     ) -> dict:
         image = self.merge_image_and_mask(image, mask)
         with self.device: 
-            pointmap_dict = self.compute_pointmap(image, pointmap)
+            pointmap_dict = self.compute_pointmap(image, pointmap, intrinsics=intrinsics)
             pointmap = pointmap_dict["pointmap"]
             pts = type(self)._down_sample_img(pointmap)
             pts_colors = type(self)._down_sample_img(pointmap_dict["pts_color"])
@@ -475,7 +480,8 @@ class InferencePipelinePointMap(InferencePipeline):
                             pointmap_dict["intrinsics"],
                             ss_return_dict,
                             ss_input_dict,
-                            backend="gsplat",
+                            backend=gs_backend,
+                            # backend="inria",
                         )
                         ss_return_dict.update(postprocessed_pose)
                         logger.info(f"Finished GS post-optimization!")

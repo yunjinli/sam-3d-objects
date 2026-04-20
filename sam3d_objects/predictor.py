@@ -31,8 +31,6 @@ from sam3d_objects.pipeline.inference_pipeline_pointmap import InferencePipeline
 from sam3d_objects.model.backbone.tdfy_dit.utils import render_utils
 from sam3d_objects.utils.visualization import SceneVisualizer
 
-from sam3d_objects.fft.fft2d import calculate_hfer_robust
-
 from types import SimpleNamespace
 
 __all__ = ["Predictor"]
@@ -109,6 +107,11 @@ class Predictor:
         stage1_inference_steps = None,
         stage1_only = False,
         with_layout_postprocess=True,
+        with_mesh_postprocess=False,
+        with_texture_baking=False,
+        use_vertex_color=True,
+        gs_backend="gsplat",
+        
     ) -> dict:
         
         image = self.merge_mask_to_rgba(image, mask)
@@ -118,13 +121,14 @@ class Predictor:
             None,
             seed,
             stage1_only=stage1_only,
-            with_mesh_postprocess=False,
-            with_texture_baking=False,
+            with_mesh_postprocess=with_mesh_postprocess,
+            with_texture_baking=with_texture_baking,
             with_layout_postprocess=with_layout_postprocess, 
-            use_vertex_color=True, 
+            use_vertex_color=use_vertex_color, 
             stage1_inference_steps=stage1_inference_steps,
             pointmap=pointmap,
             intrinsics=intrinsics,
+            gs_backend=gs_backend,
         )
 
 def _yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, rs, fovs):
